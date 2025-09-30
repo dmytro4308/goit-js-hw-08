@@ -28,45 +28,77 @@
       description: 'Lighthouse Coast Sea' },
   ];
 
-  const gallery = document.querySelector('.gallery');
+const gallery = document.querySelector('.gallery');
 
-  // 3) Генеруємо всю розмітку разом і додаємо в DOM однією операцією
-  const markup = images.map(({ preview, original, description }) => `
-    <li class="gallery-item">
-      <a class="gallery-link" href="${original}">
-        <img
-          class="gallery-image"
-          src="${preview}"
-          data-source="${original}"
-          alt="${description}"
-          loading="lazy"
-        />
-      </a>
-    </li>
-  `).join('');
+const markup = images.map(({ preview, original, description }, i) => `
+  <li class="gallery-item">
+    <a class="gallery-link" href="${original}">
+      <img
+        class="gallery-image"
+        src="${preview}"
+        data-source="${original}"
+        data-index="${i}"
+        alt="${description}"
+        loading="lazy"
+      />
+    </a>
+  </li>
+`).join('');
 
-  gallery.insertAdjacentHTML('beforeend', markup);
+gallery.insertAdjacentHTML('beforeend', markup);
 
-  // 5) Делегування: кліки тільки по зображеннях
-  gallery.addEventListener('click', (e) => {
-    const link = e.target.closest('.gallery-link');
-    if (!link) return;             // клік між елементами — нічого не робимо
-    e.preventDefault();            // забороняємо переходи/завантаження
+function openLightbox(startIndex) {
+  let index = startIndex;
 
-    const img = link.querySelector('.gallery-image');
-    const largeSrc = img.dataset.source;
-    const alt = img.alt;
+  const html = `
+    <div class="lb" aria-live="polite">
+      <img class="lb-img" src="" alt="" />
+      <div class="lb-caption"></div>
+    </div>
+  `;
 
-    // 7–8) Модалка з великим зображенням (basicLightbox)
-    const onKey = (ev) => ev.key === 'Escape' && instance.close();
-
-    const instance = basicLightbox.create(
-      `<img src="${largeSrc}" alt="${alt}" width="1280">`,
-      {
-        onShow: () => document.addEventListener('keydown', onKey),
-        onClose: () => document.removeEventListener('keydown', onKey),
-      }
-    );
-
-    instance.show();
+  const instance = basicLightbox.create(html, {
+    onShow: () => {
+      document.addEventListener('keydown', onKey);
+      render(); // render initial image
+    },
+    onClose: () => document.removeEventListener('keydown', onKey),
   });
+
+  const el = instance.element();
+  const imgEl = () => el.querySelector('.lb-img');
+  const capEl = () => el.querySelector('.lb-caption');
+
+  const render = () => {
+    const { original, description } = images[index];
+    // update image + caption
+    const img = imgEl();
+    img.src = original;
+    img.alt = description;
+    capEl().textContent = description;
+
+    // (optional) prefetch next
+    const next = new Image();
+    next.src = images[(index + 1) % images.length].original;
+  };
+
+  const next = () => { index = (index + 1) % images.length; render(); };
+  const prev = () => { index = (index - 1 + images.length) % images.length; render(); };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') instance.close();
+    if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); prev(); }
+  };
+
+  instance.show();
+}
+
+// Delegation: only clicks on images open modal
+gallery.addEventListener('click', (e) => {
+  const link = e.target.closest('.gallery-link');
+  if (!link) return;    // click between items => do nothing
+  e.preventDefault();
+  const idx = Number(link.querySelector('.gallery-image').dataset.index);
+  openLightbox(idx);
+});
